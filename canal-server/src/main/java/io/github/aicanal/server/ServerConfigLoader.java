@@ -57,7 +57,17 @@ public final class ServerConfigLoader {
         throw new IllegalArgumentException(
             "mTLS requires CANAL_TLS_CERT, CANAL_TLS_KEY and CANAL_TLS_TRUST_CERT");
       String mode = text(cluster, "mode", "standalone");
+      if (!Arrays.asList("standalone", "zookeeper", "raft").contains(mode.toLowerCase(Locale.ROOT)))
+        throw new IllegalArgumentException("cluster.mode must be standalone, zookeeper or raft");
       JsonNode zk = cluster.path("zookeeper");
+      JsonNode raftNode = cluster.path("raft");
+      Map<String, Object> raft =
+          raftNode.isObject()
+              ? new LinkedHashMap<>(mapper.convertValue(raftNode, Map.class))
+              : new LinkedHashMap<>();
+      String raftBind = System.getenv("CANAL_RAFT_BIND_ADDRESS");
+      if (raftBind != null && !raftBind.trim().isEmpty()) raft.put("bindAddress", raftBind.trim());
+      if ("raft".equalsIgnoreCase(mode)) validateRaft(node, raft);
       List<DestinationConfig> destinations = new ArrayList<>();
       for (JsonNode d : r.path("destinations")) {
         PluginConfig receiver = plugin(d, "receiver", "netty-default"),
@@ -106,6 +116,7 @@ public final class ServerConfigLoader {
           data,
           text(zk, "connectString", ""),
           text(zk, "namespace", "ai-canal"),
+          raft,
           port,
           healthPort,
           authRequired,
@@ -140,6 +151,29 @@ public final class ServerConfigLoader {
   private static void putToken(Map<String, String> m, String role, String env) {
     String v = System.getenv(env);
     if (v != null && !v.trim().isEmpty()) m.put(role, v);
+  }
+
+  private static void validateRaft(String nodeId, Map<String, Object> raft) {
+    Object bind = raft.get("bindAddress"), peers = raft.get("peers");
+    if (bind == null || String.valueOf(bind).trim().isEmpty())
+      throw new IllegalArgumentException("raft bindAddress is required");
+    if (!(peers instanceof Collection) || ((Collection<?>) peers).isEmpty())
+      throw new IllegalArgumentException("raft peers must be a non-empty list");
+    boolean local = false;
+    for (Object peer : (Collection<?>) peers) {
+      String value = String.valueOf(peer);
+      int at = value.indexOf('@'), colon = value.lastIndexOf(':');
+      if (at < 1 || colon <= at + 1 || colon == value.length() - 1)
+        throw new IllegalArgumentException("raft peer must be nodeId@host:port: " + value);
+      try {
+        int port = Integer.parseInt(value.substring(colon + 1));
+        if (port < 1 || port > 65535) throw new NumberFormatException();
+      } catch (NumberFormatException e) {
+        throw new IllegalArgumentException("invalid raft peer port: " + value);
+      }
+      if (nodeId.equals(value.substring(0, at))) local = true;
+    }
+    if (!local) throw new IllegalArgumentException("raft peers do not contain nodeId " + nodeId);
   }
 
   private static Path envPath(String name) {

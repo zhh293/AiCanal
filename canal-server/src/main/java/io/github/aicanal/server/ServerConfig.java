@@ -8,6 +8,7 @@ public final class ServerConfig {
   private final String namespace, nodeId, clusterMode, configVersion;
   private final Path dataDir;
   private final String zkConnect, zkNamespace;
+  private final Map<String, Object> raftConfig;
   private final int port, healthPort;
   private final boolean tcpAuthRequired, tlsClientAuthRequired;
   private final Map<String, String> tcpRoleTokens;
@@ -22,6 +23,7 @@ public final class ServerConfig {
       Path dataDir,
       String zkConnect,
       String zkNamespace,
+      Map<String, Object> raftConfig,
       int port,
       int healthPort,
       boolean tcpAuthRequired,
@@ -38,6 +40,7 @@ public final class ServerConfig {
     this.dataDir = dataDir;
     this.zkConnect = zkConnect;
     this.zkNamespace = zkNamespace;
+    this.raftConfig = Collections.unmodifiableMap(new LinkedHashMap<>(raftConfig));
     this.port = port;
     this.healthPort = healthPort;
     this.tcpAuthRequired = tcpAuthRequired;
@@ -75,6 +78,10 @@ public final class ServerConfig {
 
   public String getZkNamespace() {
     return zkNamespace;
+  }
+
+  public Map<String, Object> getRaftConfig() {
+    return raftConfig;
   }
 
   public int getPort() {

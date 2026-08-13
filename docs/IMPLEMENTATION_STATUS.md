@@ -14,7 +14,7 @@
 | 11 EmbeddedController | 完成 | 状态、实例控制、检查、订阅、checkpoint 查询 |
 | 12 Netty/TCP | 完成 | 帧编解码、角色、令牌鉴权、TLS/mTLS、PUBLISH/SUBSCRIBE/FETCH/ACK、EventLoop 外业务执行 |
 | 13 三种 MQ | 完成 | 官方 Kafka/RocketMQ/RabbitMQ 客户端、confirm、重试、fencing、fsync 死信、BLOCK/SKIP |
-| 14 ZooKeeper | 完成 | Curator 选主、epoch CAS、LeaderGuard、SUSPENDED/LOST fail-closed |
+| 14 集群选主 | 完成 | ZooKeeper Curator 选主与 election-only Multi-Raft；按 destination 分组、term fencing、pre-vote、check-quorum、持久化单任期投票与少数派 fail-closed |
 | 15 Admin | 完成 | JDBC 持久化版本、发布、回滚、diff、ETag、审计、RBAC 与 machine token |
 | 16 配置轮询/重启 | 完成 | ETag 轮询、hash 校验、pending/active/LKG 原子快照、退出码 20、失败回退 |
 | 17 配置示例 | 完成 | `canal-distribution/config/application.yaml` |
@@ -32,6 +32,7 @@
 以下不是代码缺失，而是不能在当前无 Broker/多节点环境中诚实宣称已通过的上线验收：
 
 - ZooKeeper 三节点分区、Leader 杀进程与接管演练。
+- Raft 三节点跨主机网络分区、UDP 丢包/抖动、滚动升级和静态成员变更演练。
 - Kafka、RocketMQ、RabbitMQ 的 Broker 重启、confirm 丢失窗口和进程崩溃演练。
 - 多 Canal Server 的 FANOUT、一主供数和滚动配置发布。
 - 24/72 小时稳定性、磁盘高水位、数千 TCP 连接与容量基线。

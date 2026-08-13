@@ -16,6 +16,36 @@ class ServerConfigLoaderTest {
         () -> new ServerConfigLoader().parse(base + duplicateDestination()));
   }
 
+  @Test
+  void validatesRaftClusterConfigurationWithoutChangingOtherModes() {
+    ServerConfig standalone = new ServerConfigLoader().parse(validConfig());
+    assertEquals("standalone", standalone.getClusterMode());
+    assertTrue(standalone.getRaftConfig().isEmpty());
+
+    String raft =
+        validConfig()
+            .replace(
+                "cluster: {mode: standalone}",
+                String.join(
+                    "\n",
+                    "cluster:",
+                    "  mode: raft",
+                    "  raft:",
+                    "    clusterId: test",
+                    "    bindAddress: 127.0.0.1:17001",
+                    "    peers: [n@127.0.0.1:17001]"));
+    ServerConfig parsed = new ServerConfigLoader().parse(raft);
+    assertEquals("raft", parsed.getClusterMode());
+    assertEquals("127.0.0.1:17001", parsed.getRaftConfig().get("bindAddress"));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new ServerConfigLoader().parse(validConfig().replace("standalone", "typo")));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new ServerConfigLoader().parse(raft.replace("n@127.0.0.1", "other@127.0.0.1")));
+  }
+
   private static String validConfig() {
     return String.join(
             "\n",

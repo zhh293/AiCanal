@@ -2,6 +2,7 @@ package io.github.aicanal.server;
 
 import io.github.aicanal.api.model.*;
 import io.github.aicanal.cluster.*;
+import io.github.aicanal.cluster.raft.RaftLeaderElector;
 import io.github.aicanal.cluster.zookeeper.ZookeeperLeaderElector;
 import io.github.aicanal.core.*;
 import io.github.aicanal.core.defaults.*;
@@ -35,15 +36,16 @@ public final class CanalServerRuntime implements AutoCloseable {
     registry.register(AuditLogger.class, JsonAuditLogger::new);
     for (DestinationConfig d : config.getDestinations()) {
       if (!d.isEnabled()) continue;
-      LeaderElector elector =
-          "zookeeper".equalsIgnoreCase(config.getClusterMode())
-              ? new ZookeeperLeaderElector()
-              : new StandaloneLeaderElector();
+      LeaderElector elector;
+      if ("zookeeper".equalsIgnoreCase(config.getClusterMode()))
+        elector = new ZookeeperLeaderElector();
+      else if ("raft".equalsIgnoreCase(config.getClusterMode())) elector = new RaftLeaderElector();
+      else elector = new StandaloneLeaderElector();
       Map<String, Object> clusterCfg = new LinkedHashMap<>();
       if (elector instanceof ZookeeperLeaderElector) {
         clusterCfg.put("connectString", config.getZkConnect());
         clusterCfg.put("namespace", config.getZkNamespace());
-      }
+      } else if (elector instanceof RaftLeaderElector) clusterCfg.putAll(config.getRaftConfig());
       PluginContext context =
           new PluginContext(
               d.getId(), config.getNodeId(), config.getConfigVersion(), config.getDataDir());

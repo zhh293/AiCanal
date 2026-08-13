@@ -10,6 +10,15 @@
 
 关键告警：WAL 磁盘使用率 >70%、接入暂停、CRC 错误、Leader session SUSPENDED/LOST、delivery lag 持续增长、死信 BLOCK、Admin 连续轮询失败。
 
+## Raft 选主运维
+
+- 使用 3 或 5 个奇数节点；所有节点配置相同的 `clusterId` 和有序 peer 集合，每个 `server.nodeId` 必须在 peer 集合中。
+- Raft 端口是 UDP。仅允许配置内 peer 双向访问，禁止公网暴露；部署前确认 NAT 后的源 IP/端口仍与 peer 地址一致。
+- `data/raft-election/{destination}/meta.properties` 是安全状态，和 WAL 一样放在节点独享的持久卷中。不得复制给另一个 nodeId，也不得为解决选举问题而随意删除。
+- 失去多数派后 Leader 会在多数派租约到期前撤销本地 LeaderGuard。告警应同时观察“无 Leader”和“同一 destination 多 Leader”，后者必须立即隔离并停止下游提交。
+- 当前成员集合是静态配置。扩缩容时先停止业务接入，统一修改所有节点配置，再整体启动并确认唯一 Leader；当前版本不支持在线成员变更。
+- 上线前注入单节点宕机、双节点宕机、双向网络分区、30% UDP 丢包和时钟跳变，验证单 Leader、少数派不供数、恢复后 term 单调增加。
+
 ## WAL 备份
 
 1. 将 destination 暂停接入并等待流水线清空，或使用存储级 crash-consistent snapshot。

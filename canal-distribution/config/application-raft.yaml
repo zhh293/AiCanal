@@ -1,0 +1,36 @@
+namespace: production.main.default
+version: raft-example-1
+cluster:
+  mode: raft
+  raft:
+    clusterId: production-a
+    bindAddress: 10.0.0.11:17001
+    peers:
+      - canal-1@10.0.0.11:17001
+      - canal-2@10.0.0.12:17001
+      - canal-3@10.0.0.13:17001
+    electionTimeoutMillis: 1500
+    heartbeatIntervalMillis: 250
+    rpcThreads: 4
+server:
+  nodeId: canal-1
+  dataDir: ./data
+  health:
+    port: 11112
+  netty:
+    port: 11111
+    authentication:
+      required: false # production: true + the three CANAL_*_TOKEN variables
+destinations:
+  - id: example-resources
+    enabled: true
+    ingress:
+      mode: FANOUT
+      allowedAgents: [example-agent]
+      maxBatchRecords: 500
+      maxBatchBytes: 4194304
+      maxRecordBytes: 1048576
+    egress:
+      type: TCP
+      channelId: tcp:default
+      tcp: {}

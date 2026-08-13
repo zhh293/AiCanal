@@ -1,0 +1,8 @@
+AI Canal election-only Raft module
+
+The election design in this module was adapted from SOFAJRaft 1.4.0,
+Copyright Ant Group, licensed under the Apache License, Version 2.0.
+The module is an independent election-only implementation and does not
+include SOFAJRaft's log replication, state machine, snapshot, or storage code.
+
+SOFAJRaft: https://github.com/sofastack/sofa-jraft

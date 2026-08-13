@@ -55,4 +55,24 @@ class ConfigAdminServiceTest {
         IllegalArgumentException.class,
         () -> s.release("prod.main.tenant", YAML + "password: plain\n", "x", ""));
   }
+
+  @Test
+  void validatesRaftMembershipBeforeRelease() {
+    ConfigValidator validator = new ConfigValidator();
+    String raft =
+        String.join(
+                "\n",
+                "cluster:",
+                "  mode: raft",
+                "  raft:",
+                "    bindAddress: 127.0.0.1:17001",
+                "    peers: [n1@127.0.0.1:17001]",
+                "server: {nodeId: n1}")
+            + "\n"
+            + YAML;
+    assertTrue(validator.validate("prod.main.tenant", raft).isEmpty());
+    assertTrue(
+        validator.validate("prod.main.tenant", raft.replace("n1@", "other@")).stream()
+            .anyMatch(error -> error.contains("server.nodeId")));
+  }
 }

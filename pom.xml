@@ -11,6 +11,7 @@
     <module>canal-storage-api</module>
     <module>canal-storage-default</module>
     <module>canal-cluster-api</module>
+    <module>canal-cluster-raft</module>
     <module>canal-cluster-zookeeper</module>
     <module>canal-egress-api</module>
     <module>canal-egress-netty</module>

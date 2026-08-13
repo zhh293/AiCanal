@@ -19,6 +19,7 @@ public final class ConfigValidator {
         return Collections.singletonList("config root must be an object");
       if (containsSecret(root))
         errors.add("inline secret/password/token is forbidden; use a secret reference");
+      validateCluster(root.path("cluster"), root.path("server").path("nodeId").asText(), errors);
       JsonNode destinations = root.path("destinations");
       if (!destinations.isArray()) errors.add("destinations must be an array");
       else {
@@ -56,5 +57,27 @@ public final class ConfigValidator {
       }
     } else if (node.isArray()) for (JsonNode n : node) if (containsSecret(n)) return true;
     return false;
+  }
+
+  private static void validateCluster(JsonNode cluster, String nodeId, List<String> errors) {
+    String mode = cluster.path("mode").asText("standalone").toLowerCase(Locale.ROOT);
+    if (!Arrays.asList("standalone", "zookeeper", "raft").contains(mode)) {
+      errors.add("cluster.mode must be standalone, zookeeper or raft");
+      return;
+    }
+    if (!"raft".equals(mode)) return;
+    JsonNode raft = cluster.path("raft"), peers = raft.path("peers");
+    if (raft.path("bindAddress").asText().isEmpty()) errors.add("raft bindAddress is required");
+    if (!peers.isArray() || peers.isEmpty()) errors.add("raft peers must be a non-empty array");
+    else {
+      boolean local = false;
+      for (JsonNode peer : peers) {
+        String value = peer.asText();
+        if (!value.matches("[^@]+@[^:]+:[0-9]+")) errors.add("invalid raft peer: " + value);
+        if (!nodeId.isEmpty() && value.startsWith(nodeId + "@")) local = true;
+      }
+      if (!nodeId.isEmpty() && !"${HOSTNAME}".equals(nodeId) && !local)
+        errors.add("raft peers do not contain server.nodeId");
+    }
   }
 }

@@ -110,7 +110,7 @@ flowchart LR
 
 ### 多节点模型
 
-ZooKeeper 只负责协调和 fencing，不复制 WAL 数据。当前集群复制基线是 **Agent FANOUT**：Agent 将同一个 `requestId` 和相同内容推送到所有目标节点，每个节点分别写自己的本地 WAL；Leader 只负责下游供数。
+ZooKeeper 或 election-only Raft 只负责协调和 fencing，不复制 WAL 数据。当前集群复制基线是 **Agent FANOUT**：Agent 将同一个 `requestId` 和相同内容推送到所有目标节点，每个节点分别写自己的本地 WAL；Leader 只负责下游供数。
 
 因此，多节点生产部署必须同时满足：
 
@@ -203,6 +203,7 @@ WAL 记录主要包括：
 | `canal-storage-api` | EventStore、恢复计划、StoredEvent 和 checkpoint SPI |
 | `canal-storage-default` | 分段二进制 WAL、CRC32C、稀疏索引、恢复与 group fsync |
 | `canal-cluster-api` | LeaderElector、LeaderGuard、Leadership 和 fencing 契约 |
+| `canal-cluster-raft` | 按 destination 分组、仅负责选主的 Multi-Raft 实现 |
 | `canal-cluster-zookeeper` | 基于 Curator/LeaderLatch 的 ZooKeeper 选主和 epoch CAS |
 | `canal-ingress-netty` | TCP 帧模型、编解码器和默认 AgentDataReceiver |
 | `canal-egress-api` | MQ Producer SPI、通用 Worker、重试和持久化死信 |
@@ -222,7 +223,8 @@ WAL 记录主要包括：
 canal-api
 ├── canal-spi
 ├── canal-storage-api ── canal-storage-default
-├── canal-cluster-api ── canal-cluster-zookeeper
+├── canal-cluster-api ─┬─ canal-cluster-raft
+│                      └─ canal-cluster-zookeeper
 ├── canal-egress-api
 │   ├── canal-egress-netty
 │   ├── canal-egress-kafka
@@ -404,7 +406,7 @@ destinations:
 | --- | --- | --- |
 | `namespace` | 建议 | 配置命名空间，Admin 要求格式为 `environment.cluster.tenant` |
 | `version` | 建议 | 当前配置版本标识，写入事件元数据 |
-| `cluster.mode` | 否 | `standalone` 或 `zookeeper`，默认 `standalone` |
+| `cluster.mode` | 否 | `standalone`、`zookeeper` 或 `raft`，默认 `standalone` |
 | `server.nodeId` | 否 | 节点 ID；精确值 `${HOSTNAME}` 时从环境变量展开 |
 | `server.dataDir` | 否 | WAL、checkpoint、配置快照和死信根目录，默认 `./data` |
 | `server.netty.port` | 否 | TCP 数据端口，默认 `11111` |
@@ -471,6 +473,7 @@ destinations:
 | Audit logger | `slf4j-json` |
 | Storage | `segmented-wal` |
 | Standalone leader elector | `standalone` |
+| Raft leader elector | `raft` |
 | ZooKeeper leader elector | `zookeeper` |
 
 ### ZooKeeper 集群模式
@@ -491,6 +494,34 @@ cluster:
 ```
 
 ZooKeeper 会话状态进入 `SUSPENDED`、`LOST` 或 `READ_ONLY` 时，本地 LeaderGuard 立即撤销领导权。再次获得领导权时通过 CAS 增加 epoch。
+
+### Raft 集群模式
+
+无需 ZooKeeper 时，可使用内置的 election-only Raft。每个 destination 是一个独立 Raft group，所有 group 复用进程级 UDP socket、定时线程和 RPC 工作线程；只持久化 `currentTerm` 与 `votedFor`，不复制业务日志、状态机或快照。
+
+```yaml
+cluster:
+  mode: raft
+  raft:
+    clusterId: production-a
+    bindAddress: 10.0.0.11:17001
+    peers:
+      - canal-1@10.0.0.11:17001
+      - canal-2@10.0.0.12:17001
+      - canal-3@10.0.0.13:17001
+    electionTimeoutMillis: 1500
+    heartbeatIntervalMillis: 250
+    rpcThreads: 4
+
+server:
+  nodeId: canal-1
+```
+
+三台机器使用完全相同的 `clusterId` 和 `peers`，只修改 `server.nodeId` 与 `bindAddress`。容器环境可用 `CANAL_RAFT_BIND_ADDRESS` 覆盖监听地址。`term` 直接作为现有 `Leadership.epoch`，因此 TCP/MQ 供数和 checkpoint CAS 的 fencing 逻辑不变。
+
+该模式实现 pre-vote、随机选举超时、持久化单任期投票、心跳和 check-quorum；Leader 在多数派租约内收不到足够响应会主动撤销领导权。建议使用 3 或 5 个奇数节点，并在可信内网通过防火墙或 NetworkPolicy 只允许 peer 之间访问 Raft UDP 端口。
+
+Raft **不替代 Agent FANOUT**：每个节点仍写自己的本地 WAL，Leader 只负责向下游供数。静态成员变更目前需要更新所有节点配置并按运维流程重启，不支持在线 joint-consensus。
 
 ### TCP 角色鉴权
 
@@ -866,6 +897,8 @@ Canal Server 的健康与指标端点当前不要求认证，并监听配置端�
 
 ```text
 data/
+├── raft-election/
+│   └── {destination}/meta.properties
 ├── {destination}/
 │   ├── wal/
 │   │   ├── 00000000000000000001.log
@@ -890,6 +923,7 @@ data/
 - `.idx` 可从 `.log` 重建；
 - `dead-letter` 在 MQ 失败达到重试上限时先 fsync，再决定 BLOCK 或 SKIP；
 - `data/config` 决定配置重启和回滚能力；
+- Raft 模式下 `raft-election` 保存 term/votedFor，必须与节点身份一起持久化，不能在普通重启时删除；
 - 多节点不能共享同一个可写本地 WAL 目录；每个节点应有独立数据卷。
 
 ## 构建、测试与编码规范
