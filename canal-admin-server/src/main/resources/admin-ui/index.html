@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b0d0c">
+    <meta name="description" content="AI Canal configuration command center">
+    <title>AI Canal · Control Room</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/assets/admin.css">
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <div id="loginGate" class="login-gate">
+      <section class="login-card" aria-labelledby="loginTitle">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>AI CANAL</span>
+        </div>
+        <p class="eyebrow">CONTROL ROOM / SECURE ACCESS</p>
+        <h1 id="loginTitle">进入配置控制中枢</h1>
+        <p class="login-copy">发布、审阅与回滚每一个数据通道配置。凭据只保存在当前浏览器会话中。</p>
+        <form id="loginForm" class="login-form">
+          <label>
+            <span>管理凭据</span>
+            <span class="input-shell">
+              <input id="tokenInput" type="password" autocomplete="current-password" placeholder="Bearer token" required>
+              <button id="revealToken" type="button" class="icon-button" aria-label="显示凭据">VIEW</button>
+            </span>
+          </label>
+          <label>
+            <span>操作者</span>
+            <input id="actorInput" type="text" autocomplete="name" placeholder="例如 zhangsan" maxlength="80">
+          </label>
+          <button class="primary-button login-button" type="submit">
+            <span>验证并进入</span><span aria-hidden="true">↗</span>
+          </button>
+          <p id="loginError" class="form-error" role="alert"></p>
+        </form>
+        <div class="login-foot">
+          <span><i class="status-dot"></i> Admin endpoint online</span>
+          <span>SESSION ONLY</span>
+        </div>
+      </section>
+    </div>
+
+    <div id="app" class="app-shell is-hidden">
+      <button id="navScrim" class="nav-scrim" type="button" aria-label="关闭导航"></button>
+      <aside class="sidebar">
+        <div class="brand-lockup sidebar-brand">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>AI CANAL</span>
+        </div>
+
+        <nav class="primary-nav" aria-label="主导航">
+          <button class="nav-item is-active" data-view="overview">
+            <span class="nav-index">01</span><span>控制总览</span>
+          </button>
+          <button class="nav-item" data-view="releases">
+            <span class="nav-index">02</span><span>发布档案</span>
+          </button>
+          <button class="nav-item role-editor" data-view="editor">
+            <span class="nav-index">03</span><span>配置工坊</span>
+          </button>
+          <button class="nav-item" data-view="audit">
+            <span class="nav-index">04</span><span>审计轨迹</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="system-state">
+            <span class="status-dot"></span>
+            <div><strong>CONTROL PLANE</strong><small>Operational</small></div>
+          </div>
+          <button id="logoutButton" class="logout-button" type="button">锁定会话</button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <button id="menuButton" class="menu-button" type="button" aria-label="打开导航">MENU</button>
+          <div class="context-switcher">
+            <span>工作命名空间</span>
+            <button id="namespaceButton" class="namespace-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+              <span id="currentNamespace">尚未选择</span><span aria-hidden="true">⌄</span>
+            </button>
+            <div id="namespaceMenu" class="namespace-menu is-hidden" role="listbox"></div>
+          </div>
+          <div class="operator">
+            <span id="roleBadge" class="role-badge">VIEWER</span>
+            <div class="operator-copy"><strong id="actorName">operator</strong><small>authenticated session</small></div>
+            <span id="operatorAvatar" class="avatar">OP</span>
+          </div>
+        </header>
+
+        <div id="viewRoot" class="view-root">
+          <section id="overviewView" class="view is-active" data-view-panel="overview">
+            <div class="hero-grid reveal">
+              <div class="hero-copy">
+                <p class="eyebrow"><span class="live-pulse"></span> CONFIGURATION COMMAND</p>
+                <h1>把每一次变更，<br><em>控制在抵达生产之前。</em></h1>
+                <p>从不可变版本到可审计发布，所有配置动作都在同一个清晰边界内完成。</p>
+              </div>
+              <div class="hero-orbit" aria-hidden="true">
+                <div class="orbit-ring ring-one"></div>
+                <div class="orbit-ring ring-two"></div>
+                <div class="orbit-core"><span id="heroVersion">—</span><small>ACTIVE</small></div>
+                <span class="orbit-label label-a">VALIDATE</span>
+                <span class="orbit-label label-b">RELEASE</span>
+                <span class="orbit-label label-c">FENCE</span>
+              </div>
+            </div>
+
+            <div class="metrics-grid reveal reveal-delay-1">
+              <article class="metric-card signal-card">
+                <div class="metric-top"><span>ACTIVE RELEASE</span><i class="status-dot"></i></div>
+                <strong id="activeVersion">—</strong>
+                <p id="activeVersionMeta">等待选择命名空间</p>
+                <div class="spark-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              </article>
+              <article class="metric-card">
+                <div class="metric-top"><span>RELEASE ARCHIVE</span><small>ALL TIME</small></div>
+                <strong id="releaseCount">0</strong>
+                <p>不可变配置版本</p>
+                <div class="metric-line"><i></i></div>
+              </article>
+              <article class="metric-card">
+                <div class="metric-top"><span>DESTINATIONS</span><small>IN ACTIVE YAML</small></div>
+                <strong id="destinationCount">0</strong>
+                <p>受控数据通道</p>
+                <div id="destinationTicks" class="destination-ticks"></div>
+              </article>
+              <article class="metric-card hash-card">
+                <div class="metric-top"><span>CONTENT INTEGRITY</span><small>SHA-256</small></div>
+                <strong id="contentHash">—</strong>
+                <p>当前配置指纹</p>
+                <div class="hash-grid" aria-hidden="true"></div>
+              </article>
+            </div>
+
+            <div class="overview-lower reveal reveal-delay-2">
+              <section class="panel release-panel">
+                <div class="panel-heading">
+                  <div><p class="eyebrow">RECENT MOVEMENT</p><h2>最近发布</h2></div>
+                  <button class="text-button" data-jump="releases" type="button">查看全部 ↗</button>
+                </div>
+                <div id="recentReleases" class="release-stream empty-state">暂无发布记录</div>
+              </section>
+              <section class="panel posture-panel">
+                <div class="panel-heading"><div><p class="eyebrow">SYSTEM POSTURE</p><h2>控制面状态</h2></div></div>
+                <div class="posture-score"><span>100</span><small>/ 100</small></div>
+                <div class="posture-list">
+                  <div><span>Immutable releases</span><strong>ENFORCED</strong></div>
+                  <div><span>Inline secrets</span><strong>BLOCKED</strong></div>
+                  <div><span>Audit trail</span><strong>ACTIVE</strong></div>
+                  <div><span>Machine pull</span><strong>ISOLATED</strong></div>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section id="releasesView" class="view" data-view-panel="releases">
+            <div class="page-heading reveal">
+              <div><p class="eyebrow">IMMUTABLE ARCHIVE</p><h1>发布档案</h1><p>追踪每一个配置版本的创建、发布与替代关系。</p></div>
+              <button class="primary-button role-editor" data-jump="editor" type="button"><span>创建新版本</span><span>＋</span></button>
+            </div>
+            <div class="toolbar reveal reveal-delay-1">
+              <label class="search-box"><span>⌕</span><input id="releaseSearch" type="search" placeholder="搜索版本、操作者或备注"></label>
+              <div class="segmented-control" aria-label="状态筛选">
+                <button class="is-active" data-status="ALL" type="button">全部</button>
+                <button data-status="PUBLISHED" type="button">已发布</button>
+                <button data-status="CREATED" type="button">待发布</button>
+                <button data-status="SUPERSEDED" type="button">已替代</button>
+              </div>
+            </div>
+            <div class="release-table-wrap reveal reveal-delay-2">
+              <table class="release-table">
+                <thead><tr><th>版本</th><th>状态</th><th>创建信息</th><th>内容指纹</th><th>备注</th><th><span class="sr-only">操作</span></th></tr></thead>
+                <tbody id="releaseTableBody"></tbody>
+              </table>
+              <div id="releaseEmpty" class="table-empty is-hidden">没有符合条件的版本。</div>
+            </div>
+          </section>
+
+          <section id="editorView" class="view" data-view-panel="editor">
+            <div class="page-heading editor-heading reveal">
+              <div><p class="eyebrow">CONFIGURATION ATELIER</p><h1>配置工坊</h1><p>验证 YAML，创建不可变 release，再交由发布角色上线。</p></div>
+              <div class="editor-actions">
+                <button id="validateButton" class="secondary-button" type="button">验证配置</button>
+                <button id="createReleaseButton" class="primary-button" type="button">创建版本 ↗</button>
+              </div>
+            </div>
+            <div class="editor-layout reveal reveal-delay-1">
+              <section class="code-studio">
+                <div class="code-toolbar">
+                  <div><span class="file-dot"></span><strong>application.yaml</strong><small id="editorState">UNSAVED DRAFT</small></div>
+                  <button id="loadActiveButton" class="text-button" type="button">载入当前版本</button>
+                </div>
+                <div class="editor-body">
+                  <pre id="lineNumbers" aria-hidden="true">1</pre>
+                  <textarea id="configEditor" spellcheck="false" aria-label="YAML 配置编辑器"></textarea>
+                </div>
+                <div class="editor-statusbar"><span>YAML</span><span id="cursorPosition">Ln 1, Col 1</span><span id="byteCount">0 bytes</span></div>
+              </section>
+              <aside class="validation-rail">
+                <section class="validation-card">
+                  <div class="validation-icon" id="validationIcon">◇</div>
+                  <p class="eyebrow">PRE-FLIGHT CHECK</p>
+                  <h2 id="validationTitle">等待验证</h2>
+                  <p id="validationMessage">运行验证后，这里会显示配置结构、密钥策略和 destination 约束结果。</p>
+                  <div id="validationResults" class="validation-results"></div>
+                </section>
+                <section class="release-note-card">
+                  <label for="releaseComment">版本说明</label>
+                  <textarea id="releaseComment" rows="4" maxlength="500" placeholder="说明这次变更解决了什么问题…"></textarea>
+                  <div><span>创建人</span><strong id="releaseActor">—</strong></div>
+                  <div><span>目标空间</span><strong id="releaseNamespace">—</strong></div>
+                </section>
+              </aside>
+            </div>
+          </section>
+
+          <section id="auditView" class="view" data-view-panel="audit">
+            <div class="page-heading reveal">
+              <div><p class="eyebrow">ACCOUNTABILITY LEDGER</p><h1>审计轨迹</h1><p>按发生顺序记录版本创建、发布与回滚动作。</p></div>
+              <button id="refreshAuditButton" class="secondary-button" type="button">刷新记录</button>
+            </div>
+            <div class="audit-layout reveal reveal-delay-1">
+              <div id="auditTimeline" class="audit-timeline empty-state">暂无审计记录</div>
+              <aside class="audit-aside">
+                <p class="eyebrow">TRACE POLICY</p><h2>每一次动作，<br>都有来处。</h2>
+                <p>审计日志保留操作者、操作类型、命名空间、版本和发生时间。配置内容始终以不可变 release 归档。</p>
+                <div class="audit-seal"><span>AC</span><small>AUDIT<br>CONTROL</small></div>
+              </aside>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div id="modalBackdrop" class="modal-backdrop is-hidden" role="presentation">
+      <section id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <button id="modalClose" class="modal-close" type="button" aria-label="关闭">×</button>
+        <p id="modalEyebrow" class="eyebrow">RELEASE CONTROL</p>
+        <h2 id="modalTitle">确认操作</h2>
+        <div id="modalBody" class="modal-body"></div>
+        <div id="modalActions" class="modal-actions"></div>
+      </section>
+    </div>
+
+    <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+    <script src="/assets/admin.js" defer></script>
+  </body>
+</html>

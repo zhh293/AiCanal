@@ -679,6 +679,18 @@ java -jar canal-admin-server/target/canal-admin-server-1.0.0-SNAPSHOT-all.jar
 AI Canal Admin READY port=8080
 ```
 
+浏览器打开 `http://127.0.0.1:8080/` 即可进入内置管理控制台。控制台静态资源直接打包在 Admin JAR 中，不依赖 Node.js、CDN 或额外 Web Server，适合内网和离线部署。
+
+首次进入时输入一个管理 bearer token 和操作者名称。token 仅保存在当前浏览器的 `sessionStorage`；关闭标签页后会话凭据消失。控制台会根据 token 对应角色自动隐藏无权限操作：
+
+- **控制总览**：查看当前活动版本、release 数量、destination 数量、内容指纹和最近发布；
+- **发布档案**：筛选和搜索不可变版本，查看内容、比较 diff、发布或回滚；
+- **配置工坊**：编辑 YAML、查看行号与字节数、运行服务端验证并创建 release；
+- **审计轨迹**：查看 release、publish 和 rollback 的操作者、命名空间、版本与时间；
+- **响应式导航**：桌面使用固定侧栏，平板和手机使用带遮罩的抽屉导航。
+
+生产环境仍应通过 HTTPS/mTLS 反向代理访问控制台。浏览器 token 代表对应管理权限，不要在共享终端上使用长期有效的高权限 token。
+
 健康检查：
 
 ```bash
@@ -708,13 +720,17 @@ X-Actor: alice
 
 | 方法与路径 | 权限 | 说明 |
 | --- | --- | --- |
+| `GET /` | 无 | 内置 Admin 管理控制台 |
 | `GET /health/live` | 无 | Admin liveness |
+| `GET /api/v1/session` | Viewer+ | 返回当前管理凭据的角色和操作者 |
+| `GET /api/v1/namespaces` | Viewer+ | 返回所有已创建命名空间 |
 | `GET /api/v1/namespaces/{ns}/releases` | Viewer+ | 查看 release 列表 |
 | `POST /api/v1/namespaces/{ns}/validate` | Editor/Admin | 校验 YAML/JSON 内容 |
 | `POST /api/v1/namespaces/{ns}/releases` | Editor/Admin | 创建不可变 release |
 | `POST /api/v1/namespaces/{ns}/releases/{version}/publish` | Publisher/Admin | 发布指定版本 |
 | `POST /api/v1/namespaces/{ns}/releases/{version}/rollback` | Publisher/Admin | 基于旧版本创建新的已发布版本 |
 | `GET /api/v1/namespaces/{ns}/releases/{from}/diff/{to}` | Viewer+ | 查看两个版本的文本差异 |
+| `GET /api/v1/audit` | Viewer+ | 返回配置控制审计记录 |
 | `GET /api/v1/runtime-config/{ns}` | Machine token | Server 拉取当前已发布配置，支持 ETag/304 |
 
 创建 release 的请求体：

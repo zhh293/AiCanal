@@ -84,6 +84,12 @@ public final class ConfigAdminService {
     return Collections.unmodifiableList(new ArrayList<>(repository.load(n).values()));
   }
 
+  public List<String> namespaces() {
+    List<String> namespaces = new ArrayList<>(repository.namespaces());
+    Collections.sort(namespaces);
+    return Collections.unmodifiableList(namespaces);
+  }
+
   public String diff(String namespace, long left, long right) {
     ConfigRelease a = requiredRelease(namespace, left), b = requiredRelease(namespace, right);
     List<String> x = Arrays.asList(a.getContent().split("\n", -1)),
