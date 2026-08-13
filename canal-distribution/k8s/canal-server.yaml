@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: ai-canal}
+spec:
+  serviceName: ai-canal
+  replicas: 3
+  selector: {matchLabels: {app: ai-canal}}
+  template:
+    metadata: {labels: {app: ai-canal}}
+    spec:
+      terminationGracePeriodSeconds: 90
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001}
+      containers:
+        - name: server
+          image: ai-canal:1.0.0
+          ports: [{name: tcp, containerPort: 11111}, {name: health, containerPort: 11112}]
+          readinessProbe: {httpGet: {path: /health/ready, port: health}, initialDelaySeconds: 10, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /health/live, port: health}, initialDelaySeconds: 20, periodSeconds: 10}
+          volumeMounts: [{name: data, mountPath: /opt/ai-canal/data}]
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: "2", memory: 2Gi}
+          lifecycle: {preStop: {exec: {command: ["sh", "-c", "sleep 10"]}}}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 100Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: ai-canal}
+spec:
+  clusterIP: None
+  selector: {app: ai-canal}
+  ports: [{name: tcp, port: 11111, targetPort: tcp}, {name: health, port: 11112, targetPort: health}]

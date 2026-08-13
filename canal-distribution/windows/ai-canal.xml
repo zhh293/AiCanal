@@ -1,0 +1,11 @@
+<service>
+  <id>ai-canal</id>
+  <name>AI Canal</name>
+  <description>AI Canal resource ingress and distribution server</description>
+  <executable>java</executable>
+  <arguments>-XX:MaxRAMPercentage=75 -jar "%BASE%\app.jar" --config "%BASE%\config\application.yaml"</arguments>
+  <workingdirectory>%BASE%</workingdirectory>
+  <log mode="roll-by-size-time"><sizeThreshold>10485760</sizeThreshold><keepFiles>10</keepFiles></log>
+  <onfailure action="restart" delay="10 sec"/>
+  <stoptimeout>90 sec</stoptimeout>
+</service>

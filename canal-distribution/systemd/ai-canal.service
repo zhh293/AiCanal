@@ -1,0 +1,22 @@
+[Unit]
+Description=AI Canal Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ai-canal
+Group=ai-canal
+WorkingDirectory=/opt/ai-canal
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=75 -jar /opt/ai-canal/app.jar --config /etc/ai-canal/application.yaml
+Restart=on-failure
+RestartPreventExitStatus=0
+SuccessExitStatus=20
+TimeoutStopSec=90
+LimitNOFILE=1048576
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ai-canal
+
+[Install]
+WantedBy=multi-user.target

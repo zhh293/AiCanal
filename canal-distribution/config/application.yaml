@@ -1,0 +1,65 @@
+namespace: local.main.default
+version: local-1
+cluster:
+  clusterId: ai-canal-local
+  mode: standalone
+server:
+  nodeId: ${HOSTNAME}
+  dataDir: ./data
+  health:
+    port: 11112
+  netty:
+    host: 0.0.0.0
+    port: 11111
+    bossThreads: 1
+    workerThreads: 4
+    idleTimeout: 60s
+    ingressExecutorThreads: 8
+    authentication:
+      required: false # production: true + the three CANAL_*_TOKEN variables
+  disruptor:
+    defaultRingBufferSize: 65536
+    publishTimeout: 3s
+destinations:
+  - id: example-resources
+    enabled: true
+    ingress:
+      mode: FANOUT
+      allowedAgents: [example-agent]
+      maxBatchRecords: 500
+      maxBatchBytes: 4194304
+      maxRecordBytes: 1048576
+    receiver:
+      type: netty-default
+      config:
+        requireBatchChecksum: true
+    parser:
+      type: html-default
+      config: {}
+    classifier:
+      type: rule-default
+      config:
+        rules:
+          - category: ai
+            keywords: [AI, LLM, Agent]
+    deduplicator:
+      type: hash-default
+      config: {}
+    logger:
+      type: slf4j-json
+      config: {}
+    storage:
+      type: segmented-wal
+      config:
+        durability: GROUP_SYNC
+        groupSyncInterval: 5ms
+        groupSyncMaxRecords: 256
+        segmentMaxBytes: 1073741824
+    egress:
+      type: TCP
+      channelId: tcp:default
+      tcp:
+        maxBatchSize: 100
+        maxBatchBytes: 1048576
+        ackTimeout: 30s
+        maxInflightBatches: 4

@@ -1,0 +1,10 @@
+target/
+.m2/
+.mvn/wrapper/apache-maven-*/
+.idea/
+.vscode/
+*.iml
+data/
+logs/
+*.log
+canal-distribution/secrets/

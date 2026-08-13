@@ -1,0 +1,12 @@
+services:
+  canal-server:
+    build:
+      context: ..
+      dockerfile: canal-distribution/Dockerfile
+    restart: unless-stopped
+    ports: ["11111:11111", "11112:11112"]
+    volumes: ["canal-data:/opt/ai-canal/data"]
+    read_only: true
+    tmpfs: ["/tmp"]
+volumes:
+  canal-data: {}
