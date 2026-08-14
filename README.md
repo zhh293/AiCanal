@@ -1173,6 +1173,7 @@ Windows 不允许删除正在被 Java 进程加载的 JAR。先停止对应 Serv
 - [运维、备份与恢复](docs/OPERATIONS.md)
 - [编码规范](docs/CODING_STYLE.md)
 - [ADR-0001 第一版实现基线](docs/adr/0001-baseline-decisions.md)
+- [Election-only Raft 设计取舍](raft-election-only-design.md)
 - [默认 Server 配置](canal-distribution/config/application.yaml)
 - [Admin 环境变量样例](canal-distribution/admin.env.example)
 - [Dockerfile](canal-distribution/Dockerfile)
