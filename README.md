@@ -4,6 +4,9 @@ AI Canal 是一个以 `destination` 为隔离单元的资源接入、处理、�
 
 系统默认提供 **at-least-once** 语义：已经持久化的数据不会因为正常重启丢失，但在“下游已收到、checkpoint 尚未提交”的故障窗口内可能重复投递。下游应使用稳定的 `eventId` 做幂等处理。
 
+> [!IMPORTANT]
+> **多节点故障切换一定会把“重新找主、重复投递与幂等”暴露给消费端。** ZooKeeper/Raft 只负责选主和 fencing，不复制 WAL 或 checkpoint。Leader 切换后，新 Leader 可能从较旧的本地 checkpoint 重新投递；所有下游必须按 `eventId` 持久化去重，TCP Consumer 还必须遍历节点重新订阅、记住已见过的最大 `epoch` 并拒绝更旧的 Leader。offset 是节点本地位置，**绝不能跨节点作为去重键**。不满足这些约束时，重复扣款、重复发券等非幂等副作用可能成为严重事故。完整约束见 [集群故障切换与消费端责任](#集群故障切换与消费端责任)。
+
 > 生产运行推荐 Java 21；当前源码以 `--release 11` 编译，并在 Java 11 和 Java 21 上执行 CI 验证。
 
 ## 目录
@@ -12,6 +15,7 @@ AI Canal 是一个以 `destination` 为隔离单元的资源接入、处理、�
 - [架构总览](#架构总览)
 - [核心数据流](#核心数据流)
 - [可靠性与一致性语义](#可靠性与一致性语义)
+- [集群故障切换与消费端责任](#集群故障切换与消费端责任)
 - [工程模块](#工程模块)
 - [技术栈](#技术栈)
 - [快速开始](#快速开始)
@@ -118,6 +122,8 @@ ZooKeeper 或 election-only Raft 只负责协调和 fencing，不复制 WAL 数�
 - Agent 对每个副本使用相同 `requestId` 和内容；
 - 每个节点使用独立、持久化的数据卷；
 - ZooKeeper 不可用或连接进入 `SUSPENDED`、`LOST`、`READ_ONLY` 时，节点立即停止供数和 checkpoint 提交。
+- Raft Leader 失去多数派后必须在多数派租约内撤销领导权；节点不得在无法证明多数派存活时继续供数。
+- TCP Consumer 持有所有 Server 的种子地址，并实现 `NOT_LEADER` 后重新找主、epoch fencing 和 `eventId` 幂等。
 
 ## 核心数据流
 
@@ -192,6 +198,44 @@ WAL 记录主要包括：
 | `PROCESS_REJECTED` | 某条原始记录已经被确定拒绝或去重 |
 | `DELIVERY_COMMIT` | 某个出口 channel 的连续提交进度 |
 | `SEGMENT_SEAL` | 格式中已识别的预留段密封类型；当前滚段流程不主动写入 |
+
+## 集群故障切换与消费端责任
+
+> [!CAUTION]
+> **选出唯一 Leader 不等于 exactly-once。** 本系统的 WAL、delivery checkpoint 和 offset 都是节点本地状态，ZooKeeper/Raft 不复制这些数据。故障切换的正确结果是“最终恢复供数，并允许重复投递”，不是“消费者无感且绝不重复”。
+
+### 正常分区与切换过程
+
+普通网络分区中，可能短暂出现“旧 Leader 尚未降级、新 Leader 已在更高 term 当选”的观察结果。Raft check-quorum 会让收不到多数派响应的旧 Leader 主动降级；恢复通信后，更高 term 的投票请求或心跳也会立即触发降级。正常情况下两个节点的 `epoch` 不同，新 Leader 的 epoch 更高。
+
+TCP Consumer 应按下面的顺序恢复：
+
+1. 向当前连接发送 `FETCH` 或 `ACK`；节点失去领导权后返回可重试的 `NOT_LEADER`。
+2. 使当前订阅失效，遍历预先配置的 Server 种子地址重新发送 `SUBSCRIBE`。当前协议的 `NOT_LEADER` **不携带 Leader 地址，也不做服务端转发**。
+3. 记录新 `SUBSCRIBE_ACK` 返回的 epoch。客户端必须为每个 destination 持久化 `maxSeenEpoch`，拒绝任何小于它的订阅或数据批次。
+4. 新 Leader 从自己的本地 checkpoint 继续供数；该 checkpoint 可能落后，因此客户端可能再次收到已经成功处理过的事件。
+5. 使用稳定的 `eventId` 查询持久化去重记录。已经处理过的事件不再执行副作用，但仍应正常 ACK，使新 Leader 的 checkpoint 能够前进。
+6. 只有在“业务结果与去重标记”可靠提交后才能 ACK。数据库场景应使用唯一键、inbox 表或同一事务完成业务写入与去重记录。
+
+Kafka、RocketMQ 和 RabbitMQ 出口不需要外部客户端重新寻找 Canal Leader：内部 MQ Worker 会在本节点失去领导权后转为 STANDBY，并由新 Leader 的 Worker 接管。但 checkpoint 同样是节点本地状态，新 Worker 仍可能向 Broker 重发已经确认过的事件；Broker 消费端和最终业务落库同样必须按 `eventId` 幂等。
+
+### 消费端强制契约
+
+| 责任 | 强制要求 | 错误做法及后果 |
+| --- | --- | --- |
+| Leader 发现 | 保存所有 Server 种子地址；收到 `NOT_LEADER` 后重新遍历并订阅 | 只配置一个节点会在切主后永久停止消费 |
+| epoch fencing | 按 destination 持久化最大 epoch；见过新 epoch 后拒绝旧 epoch | 重新连到旧 Leader 可能再次接受过期数据 |
+| 幂等键 | 只使用稳定的 `eventId` 做跨节点去重 | offset 属于节点本地 WAL，跨节点使用会误判重复或漏处理 |
+| ACK 时机 | 业务副作用与去重标记可靠提交后 ACK；重复事件也要 ACK | 提前 ACK 可能丢业务结果；不 ACK 重复事件会形成无限重放 |
+| 数据副本 | Agent 对所有节点 FANOUT 相同 `requestId` 和内容，并分别确认持久化 | 新 Leader 没有对应数据时可能出现数据缺口，而不只是重复 |
+| 非幂等副作用 | 扣款、发券、短信等必须使用业务幂等键或事务型 inbox/outbox | 重复投递会直接转化为业务事故 |
+
+### 哪种“双 Leader”不能按重复投递处理
+
+> [!WARNING]
+> **同一 destination、同一 term 出现两个 Leader 是 Raft 安全性已经失效，不是普通故障切换。** 多数派交集和“每节点每任期只投一票”正常工作时，同一 term 不可能产生两个 Leader。客户端此时看到的 epoch 也相同，无法判断哪个节点权威，不能随便选择一个继续消费。
+
+遇到同 term 双 Leader 必须立即停止该 destination 的下游供数并排查，而不是依赖客户端去重继续运行。重点检查：所有节点的 `clusterId`/`peers` 是否完全一致、`data/raft-election` 是否被删除或复制给其他 nodeId、节点身份和 UDP 来源是否可信，以及是否存在选举实现缺陷。只有“旧 Leader 为较低 epoch、新 Leader 为更高 epoch”的正常切换，才可以按照本节的 at-least-once 恢复流程处理。
 
 ## 工程模块
 
